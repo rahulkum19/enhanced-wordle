@@ -1,0 +1,77 @@
+/* General Background */
+.main-background {
+    -fx-background-color: #ffffff;
+    -fx-font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+}
+
+/* Base Tile Styling */
+.tile-text {
+    -fx-font-size: 30px;
+    -fx-font-weight: bold;
+    -fx-text-fill: black;
+}
+
+/* 1. Empty State: Just a faint border */
+.tile-empty {
+    -fx-border-color: #d3d6da;
+    -fx-border-width: 2px;
+    -fx-background-color: transparent;
+}
+
+/* 2. Typing State: Darker border while entering letters */
+.tile-typing {
+    -fx-border-color: #878a8c;
+    -fx-border-width: 2px;
+    -fx-background-color: transparent;
+}
+
+/* 3. Evaluated States: Colors applied after hitting ENTER */
+.tile-correct {
+    -fx-background-color: #6aaa64; /* GREEN */
+    -fx-border-width: 0;
+}
+.tile-correct .label { -fx-text-fill: white; }
+
+.tile-present {
+    -fx-background-color: #c9b458; /* YELLOW */
+    -fx-border-width: 0;
+}
+.tile-present .label { -fx-text-fill: white; }
+
+.tile-absent {
+    -fx-background-color: #787c7e; /* GRAY */
+    -fx-border-width: 0;
+}
+.tile-absent .label { -fx-text-fill: white; }
+
+/* Keyboard Styling */
+.button {
+    -fx-background-color: #d3d6da;
+    -fx-font-weight: bold;
+    -fx-cursor: hand;
+}
+
+.key-correct {
+    -fx-background-color: #6aaa64;
+    -fx-text-fill: white;
+}
+.key-present {
+    -fx-background-color: #c9b458;
+    -fx-text-fill: white;
+}
+.key-absent {
+    -fx-background-color: #787c7e;
+    -fx-text-fill: white;
+}
+.key-default {
+    -fx-background-color: #d3d6da;
+    -fx-text-fill: black;
+}
+
+/* Restart/Action Button */
+.restart-button {
+    -fx-background-color: #6aaa64;
+    -fx-text-fill: white;
+    -fx-font-size: 18px;
+    -fx-padding: 10 20;
+}
