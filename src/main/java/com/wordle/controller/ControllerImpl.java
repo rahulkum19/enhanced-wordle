@@ -29,7 +29,11 @@ public class ControllerImpl implements Controller {
     private static final Pattern OBJECT_PATTERN = Pattern.compile("\\{[^}]*\\}");
     private static final Pattern WORD_PATTERN = Pattern.compile("\"word\":\"([^\"]+)\"");
     private static final Pattern FREQ_PATTERN = Pattern.compile("f:([0-9.]+)");
-    private static final Pattern DEFS_PATTERN = Pattern.compile("\"defs\":\\s*\\[\\s*\"([^\"]+)\"");
+    private static final Pattern DEFS_ENTRY_PATTERN = Pattern.compile("\"([a-zA-Z]+)(?:\\\\t|\t)((?:\\\\.|[^\"])*)\"");
+    private static final Pattern LEADING_TAGS_PATTERN = Pattern.compile("^(\\s*\\([a-zA-Z0-9,._/\\-\\s]+\\)\\s*)+");
+    private static final Pattern CROSS_REF_BRACKET_PATTERN = Pattern.compile("^(?:Alternative form of|Synonym of|Ellipsis of|Variant of|Misspelling of)\\s+[^.\\[]+\\.\\s*\\[(.*?)\\]\\s*$", Pattern.CASE_INSENSITIVE);
+    private static final Pattern CROSS_REF_QUOTE_PATTERN = Pattern.compile("^(?:Alternative form of|Synonym of|Ellipsis of|Variant of|Misspelling of)\\s+[^“\"(]+[“\"(](.*?)[)”\"]\\.?\\s*$", Pattern.CASE_INSENSITIVE);
+    private static final Pattern FIRST_SENTENCE_PATTERN = Pattern.compile("^(.*?\\.)\\s+[A-Z]");
 
     private static class WordFrequency {
         final String word;
@@ -315,30 +319,119 @@ public class ControllerImpl implements Controller {
                 try (response) {
                     if (response.isSuccessful() && response.body() != null) {
                         String body = response.body().string();
-                        Matcher m = DEFS_PATTERN.matcher(body);
-                        if (m.find()) {
-                            String raw = m.group(1).trim();
-                            String pos = "";
-                            String def = raw;
-                            if (raw.contains("\t")) {
-                                String[] parts = raw.split("\t", 2);
-                                pos = switch (parts[0].toLowerCase()) {
-                                    case "n" -> "noun";
-                                    case "v" -> "verb";
-                                    case "adj" -> "adjective";
-                                    case "adv" -> "adverb";
-                                    default -> parts[0];
-                                };
-                                def = parts[1].trim();
-                            }
-                            final String finalPos = pos;
-                            final String finalDef = def;
-                            Platform.runLater(() -> model.setDefinition(finalPos, finalDef));
+                        CleanedDefinition result = selectBestDefinition(body);
+                        if (result != null) {
+                            Platform.runLater(() -> model.setDefinition(result.pos, result.def));
                         }
                     }
                 }
             }
         });
+    }
+
+    private record CleanedDefinition(String pos, String def, int score) {}
+
+    private CleanedDefinition selectBestDefinition(String json) {
+        Matcher m = DEFS_ENTRY_PATTERN.matcher(json);
+        CleanedDefinition best = null;
+        int count = 0;
+        while (m.find() && count < 8) {
+            count++;
+            CleanedDefinition candidate = cleanDefinitionEntry(m.group(1), m.group(2));
+            if (candidate != null && candidate.score > 0) {
+                if (best == null || candidate.score > best.score) {
+                    best = candidate;
+                }
+            }
+        }
+        return best;
+    }
+
+    private CleanedDefinition cleanDefinitionEntry(String rawPos, String rawDef) {
+        String pos = mapPartOfSpeech(rawPos);
+        String def = rawDef.replace("\\\"", "\"").replace("\\\\", "\\").trim();
+
+        // 1. Unwrap cross-references (e.g. "Alternative form of ogle. [(transitive) To stare...]")
+        Matcher mBracket = CROSS_REF_BRACKET_PATTERN.matcher(def);
+        if (mBracket.find()) {
+            def = mBracket.group(1).trim();
+        } else {
+            Matcher mQuote = CROSS_REF_QUOTE_PATTERN.matcher(def);
+            if (mQuote.find()) {
+                def = mQuote.group(1).trim();
+            }
+        }
+
+        // 2. Strip leading parenthetical tags e.g. (countable), (transitive, intransitive), (botany)
+        Matcher mTags = LEADING_TAGS_PATTERN.matcher(def);
+        if (mTags.find()) {
+            def = def.substring(mTags.end()).trim();
+        }
+
+        // Strip enclosing square brackets
+        if (def.startsWith("[") && def.endsWith("]")) {
+            def = def.substring(1, def.length() - 1).trim();
+            Matcher mInnerTags = LEADING_TAGS_PATTERN.matcher(def);
+            if (mInnerTags.find()) {
+                def = def.substring(mInnerTags.end()).trim();
+            }
+        }
+
+        // 3. Truncate long descriptions to first sentence if > 140 chars
+        if (def.length() > 140) {
+            Matcher sm = FIRST_SENTENCE_PATTERN.matcher(def);
+            if (sm.find() && sm.group(1).length() >= 25) {
+                def = sm.group(1).trim();
+            }
+        }
+
+        if (def.isEmpty()) {
+            return null;
+        }
+
+        // Capitalize and format
+        def = Character.toUpperCase(def.charAt(0)) + def.substring(1);
+        if (!def.endsWith(".")) {
+            def = def + ".";
+        }
+
+        // 4. Scoring suitability for everyday players
+        int score = 100;
+        String lower = def.toLowerCase();
+        if (lower.startsWith("a surname") || lower.startsWith("a placename") || lower.startsWith("a town")
+                || lower.startsWith("a city") || lower.startsWith("an unincorporated")) {
+            score -= 100;
+        }
+        if (rawDef.toLowerCase().contains("(obsolete)") || rawDef.toLowerCase().contains("(archaic)")) {
+            score -= 50;
+        }
+        if (rawDef.toLowerCase().contains("(rare)") || rawDef.toLowerCase().contains("(slang)")
+                || rawDef.toLowerCase().contains("(dialectal)")) {
+            score -= 25;
+        }
+        if (def.length() >= 25 && def.length() <= 120) {
+            score += 25;
+        }
+
+        return new CleanedDefinition(pos, def, score);
+    }
+
+    private static String mapPartOfSpeech(String raw) {
+        if (raw == null) {
+            return "";
+        }
+        return switch (raw.trim().toLowerCase()) {
+            case "n" -> "noun";
+            case "v" -> "verb";
+            case "adj" -> "adjective";
+            case "adv" -> "adverb";
+            case "prep" -> "preposition";
+            case "conj" -> "conjunction";
+            case "pron" -> "pronoun";
+            case "interj" -> "interjection";
+            case "u" -> "";
+            default -> raw.trim();
+        };
     }
 
     @Override

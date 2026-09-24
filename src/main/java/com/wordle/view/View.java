@@ -221,6 +221,25 @@ public class View implements FXComponent, Observer {
         wordLabel.setStyle("-fx-font-size: 19px; -fx-font-weight: bold; -fx-text-fill: " + (win ? "#6aaa64;" : "#f3c23e;"));
         wordLine.getChildren().add(wordLabel);
 
+        if ((partOfSpeech == null || partOfSpeech.isEmpty()) && definition != null) {
+            String[] parts = definition.split("\t|\\\\t", 2);
+            if (parts.length == 2) {
+                partOfSpeech = switch (parts[0].trim().toLowerCase()) {
+                    case "n" -> "noun";
+                    case "v" -> "verb";
+                    case "adj" -> "adjective";
+                    case "adv" -> "adverb";
+                    case "prep" -> "preposition";
+                    case "conj" -> "conjunction";
+                    case "pron" -> "pronoun";
+                    case "interj" -> "interjection";
+                    case "u" -> "";
+                    default -> parts[0].trim();
+                };
+                definition = parts[1].replace("\\\"", "\"").replace("\\\\", "\\").trim();
+            }
+        }
+
         if (partOfSpeech != null && !partOfSpeech.isEmpty()) {
             Label posLabel = new Label(partOfSpeech);
             posLabel.setStyle("-fx-font-size: 11px; -fx-font-style: italic; -fx-text-fill: #9ea4b0; " +
@@ -551,7 +570,7 @@ public class View implements FXComponent, Observer {
                         bgColor = COLOR_ABSENT;
                         borderColor = COLOR_ABSENT;
                     }
-                } else if (r == guesses.size()) {
+                } else if (r == guesses.size() && model.getStatus() == Model.STATUS.IN_PROGRESS) {
                     if (c < input.length()) {
                         text = String.valueOf(input.charAt(c));
                         borderColor = COLOR_TYPING_BORDER;

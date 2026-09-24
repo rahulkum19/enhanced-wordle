@@ -79,6 +79,7 @@ public class ModelImpl implements Model {
 
         if (won || lost) {
             status = STATUS.END_GAME;
+            hintIndex = -1;
             calculateRoundScore(won);
         }
         notifyObservers();
@@ -188,21 +189,26 @@ public class ModelImpl implements Model {
         }
     }
 
-    public int correctLetterCount() {
+    private boolean[] getDiscoveredGreenPositions() {
+        boolean[] discovered = new boolean[5];
         if (word == null || word.isEmpty()) {
-            return 0;
+            return discovered;
         }
-        boolean[] discoveredLetters = new boolean[5];
         for (String guess : guesses) {
             int len = Math.min(5, Math.min(guess.length(), word.length()));
             for (int i = 0; i < len; i++) {
                 if (guess.charAt(i) == word.charAt(i)) {
-                    discoveredLetters[i] = true;
+                    discovered[i] = true;
                 }
             }
         }
+        return discovered;
+    }
+
+    public int correctLetterCount() {
+        boolean[] discovered = getDiscoveredGreenPositions();
         int count = 0;
-        for (boolean bool : discoveredLetters) {
+        for (boolean bool : discovered) {
             if (bool) {
                 count++;
             }
@@ -220,15 +226,16 @@ public class ModelImpl implements Model {
 
     @Override
     public void useHint() {
-        if (!canUseHint() || word == null) {
+        if (!canUseHint() || word == null || word.isEmpty()) {
             return;
         }
         usedHintThisRound = true;
-        for (int i = 0; i < 5; i++) {
-            for (String guess : guesses) {
-                if (i < guess.length() && i < word.length() && guess.charAt(i) != word.charAt(i)) {
-                    hintIndex = i;
-                }
+        boolean[] discovered = getDiscoveredGreenPositions();
+        int len = Math.min(5, word.length());
+        for (int i = 0; i < len; i++) {
+            if (!discovered[i]) {
+                hintIndex = i;
+                break;
             }
         }
         notifyObservers();
@@ -350,8 +357,38 @@ public class ModelImpl implements Model {
 
     @Override
     public void setDefinition(String pos, String def) {
-        this.partOfSpeech = (pos == null) ? "" : pos.trim();
-        this.definition = (def == null) ? "" : def.trim();
+        String cleanPos = (pos == null) ? "" : pos.trim();
+        String cleanDef = (def == null) ? "" : def.trim();
+
+        // Fallback: if pos is not provided or def has an unseparated prefix like "v\t..."
+        if (cleanPos.isEmpty() && !cleanDef.isEmpty()) {
+            String[] parts = cleanDef.split("\t|\\\\t", 2);
+            if (parts.length == 2) {
+                cleanPos = mapPartOfSpeech(parts[0]);
+                cleanDef = parts[1].replace("\\\"", "\"").replace("\\\\", "\\").trim();
+            }
+        }
+
+        this.partOfSpeech = cleanPos;
+        this.definition = cleanDef;
         notifyObservers();
+    }
+
+    private static String mapPartOfSpeech(String rawPos) {
+        if (rawPos == null) {
+            return "";
+        }
+        return switch (rawPos.trim().toLowerCase()) {
+            case "n" -> "noun";
+            case "v" -> "verb";
+            case "adj" -> "adjective";
+            case "adv" -> "adverb";
+            case "prep" -> "preposition";
+            case "conj" -> "conjunction";
+            case "pron" -> "pronoun";
+            case "interj" -> "interjection";
+            case "u" -> "";
+            default -> rawPos.trim();
+        };
     }
 }
