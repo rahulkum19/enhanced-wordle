@@ -5,6 +5,12 @@
 
 ---
 
+<p align="center">
+  <img src="assets/enhanced_wordle_demo.gif" alt="Enhanced Wordle JavaFX Demo" width="420"/>
+</p>
+
+---
+
 ## Overview
 
 **Enhanced Wordle** is an expanded version of my desktop Wordle application built in Java and JavaFX. While preserving the core rules and MVC structure of the original game, this version adds several major features, including a persistent star and points scoring system, live vocabulary definitions, in-memory caching to eliminate redundant network requests, and custom victory animations.
